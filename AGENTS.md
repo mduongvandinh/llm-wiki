@@ -1,280 +1,279 @@
-# LLM Wiki — Schema & Quy tắc vận hành
+# LLM Wiki — Agent Instructions
 
-> Hệ thống knowledge base cá nhân dựa trên pattern của Andrej Karpathy.
-> LLM xây dựng và duy trì wiki từ nguồn thô. Con người chỉ đọc wiki và hỏi đáp.
+> For: Cursor, Windsurf, Codex CLI, Aider, Continue.dev, and any agent that reads AGENTS.md
+> Claude Code users: see CLAUDE.md and install the skill from skills/llm-wiki/
 
-## Kiến trúc 3 lớp
+You are maintaining a personal knowledge base using the LLM Wiki pattern.
+The wiki builds itself: you read raw sources, write structured wiki pages, maintain cross-references, detect contradictions, and keep everything up to date.
+The human only reads the wiki and asks questions.
 
-```
-raw/        → Nguồn thô (bất biến — LLM CHỈ ĐỌC, KHÔNG BAO GIỜ SỬA)
-wiki/       → Wiki do LLM viết & duy trì hoàn toàn
-outputs/    → Kết quả query, reports, phân tích
-config.yaml → Cấu hình topics, feeds, lịch chạy
-```
-
-## Cấu trúc thư mục
+## 3-Layer Architecture
 
 ```
-llm-wiki/
-├── CLAUDE.md              ← File này — schema & quy tắc
-├── config.yaml            ← Cấu hình hệ thống
-├── raw/                   ← Nguồn thô (KHÔNG ĐƯỢC SỬA)
-│   ├── articles/          ← Web articles (markdown, text)
-│   ├── papers/            ← PDF, research papers
-│   ├── notes/             ← Ghi chú cá nhân
-│   ├── media/             ← Screenshots, diagrams
-│   └── assets/            ← Downloaded images từ articles
-├── wiki/                  ← LLM sở hữu toàn bộ
-│   ├── INDEX.md           ← Catalog mọi trang wiki
-│   ├── LOG.md             ← Timeline sự kiện
-│   ├── entities/          ← Người, tổ chức, tool, project
-│   ├── concepts/          ← Khái niệm, pattern, methodology
-│   ├── sources/           ← Summary từng raw source
-│   └── syntheses/         ← Phân tích tổng hợp, so sánh
-├── outputs/               ← Kết quả query & reports
-└── .discoveries/          ← Metadata cho auto-discovery
-    ├── feeds.json         ← Nguồn đang theo dõi
-    ├── gaps.json          ← Knowledge gaps cần lấp
-    └── history.json       ← Nguồn đã xử lý (tránh trùng)
+raw/        → Raw sources (IMMUTABLE — you READ ONLY, NEVER modify)
+wiki/       → Wiki you write and maintain entirely
+outputs/    → Query results, reports, battlecards, briefs
+config.yaml → Topics, feeds, schedule
 ```
 
-## Quy tắc vàng
+## Golden Rules
 
-### 1. Raw sources là bất biến
-- KHÔNG BAO GIỜ sửa, xóa, hoặc di chuyển file trong `raw/`
-- Đây là source of truth — mọi thứ trong wiki phải truy ngược được về raw
+1. **raw/ is immutable.** Never edit, delete, or move files in raw/. It is the source of truth.
+2. **You own wiki/ entirely.** The human does not manually edit wiki pages.
+3. **One file per topic.** Each entity, concept, and source summary is a separate .md file. Filename: kebab-case.
+4. **Cross-reference everything.** Use `[[filename]]` links. Every page needs at least 2 links to other pages.
+5. **Keep INDEX.md current.** Create/delete a wiki page → update INDEX.md immediately.
+6. **Log all activity.** Every action gets an entry in wiki/LOG.md.
 
-### 2. Wiki do LLM sở hữu hoàn toàn
-- Con người KHÔNG sửa wiki bằng tay
-- LLM tạo, cập nhật, xóa trang wiki
-- Mỗi thay đổi phải được ghi vào LOG.md
+## How to Run Each Workflow
 
-### 3. Mỗi topic một file
-- Mỗi entity, concept, source summary là một file `.md` riêng
-- File name: `kebab-case.md` (VD: `andrej-karpathy.md`, `llm-agents.md`)
-- Không tạo file quá dài — tách thành nhiều file nếu > 500 dòng
+When the user asks you to run the wiki, follow these workflows. Use natural language descriptions of what you're doing — you don't have a slash command, just execute the steps directly.
 
-### 4. Cross-reference bằng wiki links
-- Dùng format `[[tên-file]]` để liên kết giữa các trang
-- Mỗi trang nên có ít nhất 2 liên kết đến trang khác
-- Orphan pages (không ai liên kết đến) cần được phát hiện khi lint
+### Run full cycle (discover → ingest → lint)
 
-### 5. INDEX.md luôn cập nhật
-- Mỗi lần tạo/xóa trang → cập nhật INDEX.md
-- Format: `- [Tên trang](path) — mô tả một dòng`
-- Phân nhóm theo category: entities, concepts, sources, syntheses
+1. Read `config.yaml` to understand topics, feeds, and settings
+2. Run **discover**: search for new sources based on topics/gaps
+3. Run **ingest**: process all new files in `raw/`
+4. Run **lint**: health check the wiki
+5. Report summary
 
-### 6. LOG.md ghi nhận mọi hoạt động
-- Format: `## [YYYY-MM-DD HH:mm] action | Mô tả`
-- Actions: `ingest`, `query`, `lint`, `discover`, `update`
-- Mỗi entry ghi rõ: files đã tạo/sửa, số trang bị ảnh hưởng
+### Ingest
 
-## Workflows
+1. Read `config.yaml` and `AGENTS.md` (this file) for schema and rules
+2. Read `.discoveries/history.json` → get list of already-processed files
+3. Scan `raw/` → find files not in history
+4. For each new file:
+   a. Read full content
+   b. Create source summary → `wiki/sources/`
+   c. Extract entities → create/update `wiki/entities/`
+   d. Extract concepts → create/update `wiki/concepts/`
+   e. Add `[[cross-references]]` to related pages
+   f. Flag contradictions with existing content
+5. Update `wiki/INDEX.md`
+6. Append to `wiki/LOG.md`
+7. Update `.discoveries/history.json`
 
-### Ingest (Nhập nguồn mới)
+**Rules:**
+- Never fabricate information — only write what's in the raw sources
+- One source typically creates 5–15 wiki pages
+- If new info contradicts existing → keep both, note the contradiction explicitly
+- Always cite sources: `[Source: filename](../raw/path)`
 
-```
-1. Đọc file mới trong raw/
-2. Tạo source summary trong wiki/sources/
-3. Trích xuất entities → tạo/cập nhật wiki/entities/
-4. Trích xuất concepts → tạo/cập nhật wiki/concepts/
-5. Tìm connections với trang đã có → thêm cross-references
-6. Phát hiện contradictions với nội dung cũ → ghi chú
-7. Cập nhật INDEX.md
-8. Ghi LOG.md
-9. Cập nhật .discoveries/history.json
-```
+### Query
 
-**Quy tắc ingest:**
-- Một source có thể ảnh hưởng 5-15 wiki pages
-- Luôn trích dẫn nguồn: `[Nguồn: tên-file-raw](../raw/path)`
-- Nếu thông tin mới mâu thuẫn với cũ → giữ cả hai, ghi rõ mâu thuẫn
-- Không bịa thông tin — chỉ viết những gì có trong raw sources
+1. Read `wiki/INDEX.md` → find relevant pages
+2. Read those wiki pages (read enough context, not just 1-2 pages)
+3. Synthesize answer with citations `[[wiki-page]]`
+4. If the answer has analytical value → save to `wiki/syntheses/` or `outputs/`
+5. Append to `wiki/LOG.md`
 
-### Query (Hỏi đáp)
+**Rules:**
+- Answer ONLY from wiki content, not from external knowledge
+- If wiki lacks info → say so and suggest what to discover
+- Comparisons, analyses → automatically save as synthesis pages
 
-```
-1. Đọc INDEX.md để tìm trang liên quan
-2. Đọc các trang wiki liên quan
-3. Tổng hợp câu trả lời với citations
-4. Nếu câu trả lời có giá trị → lưu vào outputs/ hoặc wiki/syntheses/
-5. Ghi LOG.md
-```
+### Lint
 
-**Quy tắc query:**
-- Trả lời dựa trên wiki, KHÔNG dựa trên kiến thức ngoài
-- Nếu wiki không có đủ thông tin → nói rõ và gợi ý nguồn cần tìm
-- Câu trả lời hay (so sánh, phân tích) → file lại thành wiki page mới
+1. Read all files in `wiki/`
+2. Check for:
+   - **Contradictions**: conflicting claims between pages
+   - **Orphans**: pages nobody links to
+   - **Missing pages**: `[[links]]` pointing to non-existent files
+   - **Stale claims**: old info contradicted by newer sources
+   - **Broken links**: links to raw sources that no longer exist
+   - **Gaps**: important areas with no coverage
+   - **Quality**: pages too short, missing sources, missing cross-refs
+3. Save report → `outputs/lint-YYYY-MM-DD.md`
+4. Update `.discoveries/gaps.json`
+5. Append to `wiki/LOG.md`
 
-### Lint (Kiểm tra sức khỏe)
+### Discover
 
-```
-1. Kiểm tra contradictions giữa các trang
-2. Tìm orphan pages (không ai liên kết đến)
-3. Tìm mentioned-but-missing (nhắc đến nhưng chưa có trang)
-4. Tìm stale claims (thông tin cũ bị nguồn mới bác bỏ)
-5. Tìm knowledge gaps (lĩnh vực thiếu coverage)
-6. Kiểm tra broken wiki links
-7. Đề xuất trang mới cần tạo
-8. Đề xuất nguồn mới cần tìm
-9. Ghi kết quả vào outputs/ và LOG.md
-```
+1. Read `config.yaml` → topics, feeds, discovery settings
+2. Read `.discoveries/gaps.json` → knowledge gaps to fill
+3. Read `.discoveries/history.json` → avoid re-processing
+4. Search web for sources based on topics + gaps
+5. Fetch content → save to `raw/articles/YYYY-MM-DD-slug.md` with frontmatter:
+   ```yaml
+   ---
+   title: "Title"
+   url: "https://..."
+   discovered: YYYY-MM-DD
+   topic: "topic name"
+   ---
+   ```
+6. Update `.discoveries/history.json`
+7. Trigger ingest on new sources
 
-### Discover (Tự động tìm nguồn)
+**Rules:**
+- Max sources per cycle: see `config.yaml → schedule.run.max_sources`
+- Priority: gaps > pain points > trending > feeds
+- Skip: ads, low-quality listicles, duplicates
+- Never re-fetch URLs already in history.json
 
-```
-1. Đọc config.yaml → lấy danh sách topics & feeds
-2. Đọc .discoveries/gaps.json → lấy knowledge gaps
-3. Web search theo topics + gaps
-4. Scrape articles tìm được → lưu vào raw/articles/
-5. Cập nhật .discoveries/feeds.json & history.json
-6. Trigger ingest cho nguồn mới
-7. Ghi LOG.md
-```
+## Wiki Page Formats
 
-**Quy tắc discover:**
-- Chỉ tìm nguồn liên quan đến topics trong config.yaml
-- Không tải lại nguồn đã có trong history.json
-- Ưu tiên: gaps.json > trending topics > feeds định kỳ
-- Mỗi lần discover tối đa 5-10 nguồn mới (tránh overload)
-
-## Format trang wiki
-
-### Entity page (wiki/entities/)
-
+### Entity (wiki/entities/)
 ```markdown
 ---
 type: entity
 category: person | organization | tool | project
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
-sources: [danh sách raw sources]
+sources: [list of raw source files]
 ---
 
-# Tên Entity
+# Entity Name
 
-Mô tả ngắn 1-2 câu.
+One-line description.
 
-## Tổng quan
-[Mô tả chi tiết]
+## Overview
+[Details]
 
-## Điểm đáng chú ý
+## Key Points
 - [Bullet points]
 
-## Liên kết
-- [[concept-liên-quan]]
-- [[entity-liên-quan]]
+## Links
+- [[related-concept]]
+- [[related-entity]]
 
-## Nguồn
-- [Source 1](../raw/path)
-- [Source 2](../raw/path)
+## Sources
+- [Source 1](../raw/articles/filename.md)
 ```
 
-### Concept page (wiki/concepts/)
-
+### Concept (wiki/concepts/)
 ```markdown
 ---
 type: concept
 domain: ai | engineering | business | ...
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
-sources: [danh sách raw sources]
+sources: []
 ---
 
-# Tên Concept
+# Concept Name
 
-Mô tả ngắn 1-2 câu.
+One-line description.
 
-## Định nghĩa
-[Giải thích rõ ràng]
+## Definition
+[Clear explanation]
 
-## Cách hoạt động
-[Chi tiết kỹ thuật nếu cần]
+## How It Works
+[Technical details if applicable]
 
-## Ví dụ
-[Ví dụ cụ thể]
+## Examples
+[Concrete examples]
 
-## Liên kết
-- [[concept-liên-quan]]
-- [[entity-liên-quan]]
+## Links
+- [[related-concept]]
 
-## Nguồn
-- [Source 1](../raw/path)
+## Sources
+- [Source 1](../raw/articles/filename.md)
 ```
 
-### Source summary (wiki/sources/)
-
+### Source Summary (wiki/sources/)
 ```markdown
 ---
 type: source
 format: article | paper | note | video | podcast
-raw_path: raw/articles/ten-file.md
+raw_path: raw/articles/filename.md
 ingested: YYYY-MM-DD
 ---
 
-# Tên Source
+# Source Title
 
-## Tóm tắt
-[2-3 đoạn tóm tắt nội dung chính]
+## Summary
+[2-3 paragraph summary]
 
-## Key takeaways
-- [Bullet points — điểm quan trọng nhất]
+## Key Takeaways
+- [Most important points]
 
-## Entities được nhắc đến
+## Entities Mentioned
 - [[entity-1]]
-- [[entity-2]]
 
-## Concepts được nhắc đến
+## Concepts Mentioned
 - [[concept-1]]
-- [[concept-2]]
 
-## Trích dẫn đáng chú ý
-> "Quote quan trọng từ nguồn"
+## Notable Quotes
+> "Important quote from the source"
 ```
 
-### Synthesis page (wiki/syntheses/)
-
+### Synthesis (wiki/syntheses/)
 ```markdown
 ---
 type: synthesis
-topic: chủ đề phân tích
+topic: analysis topic
 created: YYYY-MM-DD
 sources_count: N
 ---
 
-# Tiêu đề phân tích
+# Analysis Title
 
-## Câu hỏi gốc
-[Câu hỏi hoặc mục đích phân tích]
+## Question
+[The question or purpose of this analysis]
 
-## Phân tích
-[Nội dung phân tích tổng hợp]
+## Analysis
+[Synthesized content from multiple sources]
 
-## Kết luận
-[Tóm tắt kết luận]
+## Conclusion
+[Summary of findings]
 
-## Nguồn sử dụng
+## Sources Used
 - [[source-1]]
 - [[source-2]]
 ```
 
-## Auto-Discovery
+## Variant-Specific Instructions
 
-Hệ thống tự động tìm nguồn mới dựa trên:
+If `config.yaml` has `book_mode: true`:
+- Check each raw file for `chapter: N` frontmatter
+- Skip files where `N > config.current_chapter` (spoiler protection)
+- Log: `[SKIP] filename — chapter N exceeds current_chapter M`
+- Extract: characters, locations, factions, events, quotes, themes
 
-1. **Topics** trong config.yaml — web search định kỳ
-2. **Knowledge gaps** — lint phát hiện thiếu gì → discover tự tìm
-3. **Feeds** — RSS, GitHub repos, YouTube channels
-4. **Snowball** — đọc references trong sources đã có → follow links
+If `config.yaml` has `change_detection: true`:
+- When re-ingesting a known source, compare new content to existing wiki page
+- If significant change detected → create `wiki/changes/YYYY-MM-DD-entity.md`
+- Mark changed entity page with `⚡ CHANGED: [description]`
+- Log with `[CHANGE DETECTED]` tag
 
-Chu kỳ tự động (cấu hình trong config.yaml):
-- Discover: mỗi ngày (hoặc theo cron)
-- Ingest: ngay khi có file mới trong raw/
-- Lint: hàng tuần
-- Full recompile: hàng tháng (nếu cần)
+## Special Commands (natural language equivalents)
 
-## Ngôn ngữ
+**book-summary** — Generate structured summary of the book wiki:
+- Cast of characters table (name, role, faction, status)
+- Timeline of key events (up to current_chapter)
+- Major factions and their goals
+- Key locations
+- Major themes
+- Unresolved mysteries / open questions
+- Notable quotes
+- Save to `outputs/book-summary-YYYY-MM-DD.md`
 
-- Wiki content viết bằng **tiếng Việt có dấu** (trừ thuật ngữ kỹ thuật giữ tiếng Anh)
-- File names: tiếng Anh, kebab-case
-- Frontmatter: tiếng Anh
+**competitive-brief "Name"** — Generate battlecard for a competitor:
+- One-line positioning
+- Pricing table (tiers, prices, limits)
+- Top features list
+- Recent moves (last 30 days)
+- Known weaknesses (from reviews/Reddit)
+- Job postings signal (roadmap inference)
+- How we differ
+- Save to `outputs/battlecard-name-YYYY-MM-DD.md`
+
+**interview-prep "Company"** — Generate interview prep 1-pager:
+- Company overview (stage, size, business model)
+- Tech stack
+- Engineering culture signals
+- Recent news
+- Interview process (from Glassdoor/Reddit)
+- Known interview questions
+- Compensation range (from levels.fyi/Reddit)
+- Green flags / red flags
+- Questions to ask them
+- Save to `outputs/interview-prep-company-YYYY-MM-DD.md`
+
+## Error Handling
+
+- WebFetch/WebSearch fails → log error in LOG.md, skip that source, continue
+- Unreadable raw file (binary, corrupted) → skip, log
+- Wiki too large for context → read INDEX.md first, then only relevant pages
+- Missing config.yaml field → use defaults from this file

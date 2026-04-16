@@ -1,6 +1,6 @@
 ---
 name: llm-wiki
-description: Xây dựng và duy trì knowledge base cá nhân theo pattern LLM Wiki (Karpathy). Hỗ trợ init, ingest, query, lint, discover, run, digest, pain-rank.
+description: Xây dựng và duy trì knowledge base cá nhân theo pattern LLM Wiki (Karpathy). Hỗ trợ init, ingest, query, lint, discover, run, digest, pain-rank, setup, book-summary, competitive-brief, interview-prep.
 ---
 
 # LLM Wiki — Claude Code Skill
@@ -23,6 +23,10 @@ Skill này hỗ trợ các sub-commands sau. Parse argument đầu tiên để x
 | `status` | Xem trạng thái wiki | `/llm-wiki status` |
 | `digest` | Daily brief — tóm tắt thay đổi wiki 24h | `/llm-wiki digest` |
 | `pain-rank` | Xếp hạng pain points theo cơ hội kinh doanh | `/llm-wiki pain-rank` |
+| `setup` | Khởi tạo wiki theo variant template có sẵn | `/llm-wiki setup book-companion` |
+| `book-summary` | Tóm tắt có cấu trúc toàn bộ wiki sách | `/llm-wiki book-summary` |
+| `competitive-brief` | Battlecard 1-pager cho một competitor | `/llm-wiki competitive-brief "Linear"` |
+| `interview-prep` | 1-pager chuẩn bị interview cho một công ty | `/llm-wiki interview-prep "Stripe"` |
 
 Nếu không có sub-command → hiển thị trạng thái và hỏi user muốn làm gì.
 
@@ -332,6 +336,285 @@ Lưu vào: `outputs/pain-rank-YYYY-MM-DD.md`
 - Wiki links: `[[kebab-case-name]]`
 - Cross-refs: mỗi trang ít nhất 2 links đến trang khác
 - Citations: `[Nguồn: filename](../raw/path)`
+
+## Command: setup
+
+**Mục đích:** Khởi tạo wiki theo một variant template có sẵn trong `variants/`.
+
+**Syntax:** `/llm-wiki setup <variant-name>`
+
+**Variants có sẵn:** `book-companion`, `competitive-intel`, `job-search`
+
+**Quy trình:**
+1. Kiểm tra `WIKI_ROOT/variants/<variant-name>/` tồn tại
+2. Nếu `config.yaml` chưa có → copy `variants/<variant-name>/config.yaml` vào `WIKI_ROOT/`
+3. Đọc `variants/<variant-name>/CLAUDE.md` → merge schema extensions vào `WIKI_ROOT/CLAUDE.md`
+4. Tạo folder structure đầy đủ nếu chưa có: `raw/`, `wiki/entities/`, `wiki/concepts/`, `wiki/sources/`, `wiki/syntheses/`, `outputs/`, `.discoveries/`
+5. Copy `variants/<variant-name>/sample-data/*` → `WIKI_ROOT/raw/articles/`
+6. Chạy `ingest` tự động trên sample data vừa copy
+7. Báo cáo kết quả và gợi ý các câu query đầu tiên
+
+**Output ví dụ (book-companion):**
+```
+Setting up book-companion variant...
+✓ Config copied → config.yaml
+✓ Schema extensions merged → CLAUDE.md
+✓ Folder structure created
+✓ Sample data: 3 files → raw/articles/
+✓ Ingest complete: 12 wiki pages created
+  - 5 characters (Paul, Jessica, Duncan, Gurney, Stilgar)
+  - 3 locations (Caladan, Arrakis, Giedi Prime)
+  - 2 factions (Atreides, Harkonnen)
+  - 2 concepts (The Spice, Bene Gesserit)
+
+Wiki ready! Try:
+  /llm-wiki query "Who is Paul Atreides?"
+  /llm-wiki query "What is the relationship between House Atreides and Arrakis?"
+  /llm-wiki book-summary
+```
+
+**Quy tắc:**
+- Nếu `config.yaml` đã tồn tại → hỏi user có muốn overwrite không, mặc định là KHÔNG
+- Nếu variant không tồn tại → liệt kê danh sách variants có sẵn
+- Luôn chạy ingest sau khi copy sample data để wiki có nội dung ngay
+
+---
+
+## Command: book-summary
+
+**Mục đích:** Tạo tóm tắt có cấu trúc toàn bộ wiki sách — characters, timeline, themes, mysteries.
+
+**Yêu cầu:** Wiki phải ở `book_mode: true` trong config.yaml
+
+**Quy trình:**
+1. Đọc `config.yaml` → lấy tên sách, `current_chapter`
+2. Đọc `wiki/INDEX.md` → xác định tất cả pages
+3. Đọc toàn bộ `wiki/entities/` (characters, locations, factions)
+4. Đọc toàn bộ `wiki/concepts/` (themes, events, quotes)
+5. Tổng hợp thành structured summary
+
+**Output format:**
+```markdown
+# [Tên sách] — Book Summary (đến Chapter N)
+
+## Cast of Characters
+| Nhân vật | Vai trò | Faction | Trạng thái |
+|----------|---------|---------|-----------|
+| Paul Atreides | Protagonist | House Atreides | Alive |
+| ... | | | |
+
+## Timeline of Key Events
+1. [Event 1] — Chapter N
+2. [Event 2] — Chapter N
+...
+
+## Major Factions
+- **House Atreides:** [mô tả ngắn, members, goals]
+- **House Harkonnen:** [mô tả ngắn, members, goals]
+
+## Key Locations
+- **Arrakis:** [mô tả, significance]
+- **Caladan:** [mô tả, significance]
+
+## Major Themes
+1. [Theme 1] — [giải thích ngắn]
+2. [Theme 2] — [giải thích ngắn]
+
+## Unresolved Mysteries / Open Questions
+- [Question 1 chưa có câu trả lời đến chapter hiện tại]
+- [Question 2]
+
+## Notable Quotes
+> "[Quote 1]" — [Nhân vật], Chapter N
+
+> "[Quote 2]" — [Nhân vật], Chapter N
+```
+
+Lưu vào: `outputs/book-summary-YYYY-MM-DD.md`
+
+**Quy tắc:**
+- Chỉ include thông tin đến `current_chapter` trong config (spoiler protection)
+- Không thêm thông tin từ kiến thức bên ngoài — chỉ từ wiki
+- Nếu wiki quá nhỏ (< 5 pages) → gợi ý user ingest thêm chương
+
+---
+
+## Command: competitive-brief
+
+**Mục đích:** Tạo battlecard 1-pager cho một competitor cụ thể.
+
+**Syntax:** `/llm-wiki competitive-brief "<Tên Competitor>"`
+
+**Quy trình:**
+1. Tìm entity page của competitor trong `wiki/entities/`
+2. Đọc toàn bộ pages liên quan (products, pricing, features)
+3. Đọc `wiki/changes/` nếu có (recent changes detected)
+4. Tổng hợp thành battlecard format
+
+**Output format:**
+```markdown
+# Competitive Brief: [Competitor Name]
+*Generated: YYYY-MM-DD | Sources: N wiki pages*
+
+## One-Line Positioning
+[Tagline hoặc how they describe themselves]
+
+## Pricing
+| Tier | Price | Key Limits |
+|------|-------|-----------|
+| Free | $0 | [limits] |
+| Pro | $X/mo | [limits] |
+| Enterprise | Custom | [limits] |
+
+## Top Features
+- [Feature 1]: [mô tả ngắn]
+- [Feature 2]: [mô tả ngắn]
+- [Feature 3]: [mô tả ngắn]
+
+## Recent Moves (30 ngày qua)
+- [Date]: [Change/announcement]
+
+## Known Weaknesses (từ reviews & Reddit)
+- [Weakness 1]
+- [Weakness 2]
+
+## Job Postings Signal
+[Họ đang hire vị trí gì → signal về roadmap]
+
+## How We Differ
+[Điểm khác biệt của chúng ta so với họ]
+```
+
+Lưu vào: `outputs/battlecard-<competitor>-YYYY-MM-DD.md`
+
+**Quy tắc:**
+- Chỉ dùng thông tin CÓ TRONG WIKI — không bịa
+- Nếu không tìm thấy competitor trong wiki → gợi ý: `Drop competitor info into raw/ and run /llm-wiki ingest`
+- Nếu có change detection data → highlight changes bằng `⚡ CHANGED`
+
+---
+
+## Command: interview-prep
+
+**Mục đích:** Tổng hợp 1-pager chuẩn bị interview cho một công ty cụ thể.
+
+**Syntax:** `/llm-wiki interview-prep "<Tên Công ty>"`
+
+**Quy trình:**
+1. Tìm entity page của công ty trong `wiki/entities/`
+2. Đọc tất cả pages liên quan (roles, culture, tech stack, news)
+3. Đọc `wiki/sources/` liên quan đến công ty đó
+4. Tổng hợp thành interview prep format
+
+**Output format:**
+```markdown
+# Interview Prep: [Company Name]
+*Generated: YYYY-MM-DD | Sources: N wiki pages*
+
+## Company Overview
+[3-4 câu: business model, stage, size]
+
+## Tech Stack
+[Những gì đã biết về tech stack của họ]
+
+## Engineering Culture
+- [Culture signal 1 — từ reviews/blogs]
+- [Culture signal 2]
+- [Culture signal 3]
+
+## Recent News (30 ngày qua)
+- [Date]: [News item]
+
+## The Role
+[Tóm tắt JD đã collect được nếu có]
+
+## Interview Process (từ Glassdoor/Reddit)
+1. [Round 1]: [format, duration, focus]
+2. [Round 2]: [format]
+...
+
+## Known Interview Questions
+- [Question 1 — thường gặp]
+- [Question 2]
+
+## Green Flags
+- [Positive signal 1]
+- [Positive signal 2]
+
+## Red Flags / Watch Out For
+- [Warning 1 — từ reviews]
+
+## Questions to Ask Them
+- [Question 1 — meaningful, shows research]
+- [Question 2]
+- [Question 3]
+```
+
+Lưu vào: `outputs/interview-prep-<company>-YYYY-MM-DD.md`
+
+**Quy tắc:**
+- Chỉ dùng thông tin CÓ TRONG WIKI
+- Nếu thiếu data → ghi rõ "No data — consider adding [source type]"
+- Questions to Ask phải cụ thể, không generic — dựa trên thông tin đã research
+
+---
+
+## Ingest: Spoiler Protection (book_mode)
+
+Khi `book_mode: true` trong config.yaml, áp dụng thêm logic sau trong command ingest:
+
+**Quy trình bổ sung sau bước đọc file:**
+1. Đọc frontmatter của file raw → tìm field `chapter: N`
+2. Đọc `config.yaml → current_chapter`
+3. Nếu `chapter > current_chapter` → SKIP file này
+4. Ghi vào LOG.md: `[SKIP] raw/articles/[filename] — chapter N > current_chapter M (spoiler protection)`
+5. Tiếp tục với file tiếp theo
+
+**Nếu không có field `chapter` trong frontmatter** → ingest bình thường (coi là safe)
+
+**Cập nhật current_chapter:** User tự sửa `config.yaml → current_chapter` khi đọc đến chương mới.
+Gợi ý thêm vào setup: "Update `current_chapter` in config.yaml as you read each chapter."
+
+---
+
+## Discover: Change Detection (competitive-intel)
+
+Khi `change_detection: true` trong config.yaml, áp dụng thêm logic sau trong command discover:
+
+**Quy trình bổ sung khi fetch source đã có trong history:**
+1. Đọc nội dung mới từ website/feed
+2. Đọc wiki entity page tương ứng (nếu có)
+3. So sánh các field quan trọng: pricing, features, positioning
+4. Nếu phát hiện thay đổi:
+   a. Tạo file `wiki/changes/YYYY-MM-DD-<entity-name>.md` với diff
+   b. Cập nhật entity page, ghi `⚡ CHANGED: [mô tả thay đổi]` ở đầu
+   c. Ghi LOG.md với tag `[CHANGE DETECTED]`
+   d. Include trong digest report
+
+**Format file change:**
+```markdown
+---
+type: change
+entity: competitor-name
+detected: YYYY-MM-DD
+---
+
+# Change Detected: [Competitor Name] — YYYY-MM-DD
+
+## What Changed
+[Mô tả thay đổi cụ thể]
+
+## Old Value
+[Giá trị cũ]
+
+## New Value
+[Giá trị mới]
+
+## Significance
+[Tại sao thay đổi này quan trọng]
+```
+
+---
 
 ## Error Handling
 
